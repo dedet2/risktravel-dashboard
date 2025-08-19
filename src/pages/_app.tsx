@@ -28,11 +28,10 @@ export default function MyApp({ Component, pageProps }: AppProps) {
       <header className="app-header">
         <h1>RiskTravel</h1>
         <nav className="app-nav">
-          {/* These links are placeholders. As you build out more pages
-              (e.g. /agents, /metrics, /crm), update the hrefs accordingly. */}
           <a href="/">Home</a>
-          <a href="#agents">Agents</a>
-          <a href="#metrics">Metrics</a>
+          <a href="/agents">Agents</a>
+          <a href="/metrics">Metrics</a>
+          <a href="/crm">CRM</a>
         </nav>
       </header>
       <Component {...pageProps} />
