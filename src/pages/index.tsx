@@ -16,18 +16,18 @@ export default function Home() {
         <meta name="description" content="Admin dashboard for the RiskTravel empire" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
-      <main className="container" style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
-        <h1 style={{ fontSize: '2rem', marginBottom: '1rem' }}>RiskTravel Dashboard</h1>
+      <main className="container">
+        <h1>Welcome to RiskTravel</h1>
         <p>
-          Welcome! This project provides the foundation for the admin dashboard
-          powering your AI governance and retreat business. Over time this page
-          will evolve into a fully featured dashboard with real‑time metrics,
-          agent controls, and workflows tailored to your specific needs.
+          This scaffold provides the foundation for your admin dashboard,
+          which will eventually display real‑time metrics, agent statuses and
+          workflows tailored to your AI governance and retreat business.
         </p>
         <p>
-          To get started, run <code>npm install</code> followed by
-          <code> npm run dev</code> to launch a local development server. Then
-          point your browser to <code>http://localhost:3000</code>.
+          Next steps include connecting your data sources (Airtable, Postgres
+          or similar), building pages for agents, metrics and CRM, and
+          integrating automation workflows. Use the navigation links above to
+          explore new pages as you add them.
         </p>
       </main>
     </>

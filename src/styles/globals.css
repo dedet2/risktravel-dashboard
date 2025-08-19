@@ -1,0 +1,88 @@
+/*
+  Global styles for the RiskTravel dashboard
+
+  We define a set of CSS custom properties (variables) based on your
+  brand palette. These variables can be reused throughout the app to
+  maintain a consistent look and feel. If you decide to update your
+  brand colours later, simply adjust the values here.
+*/
+
+:root {
+  /* Primary brand colours */
+  --colour-deep-purple: #6200ea;
+  --colour-mid-purple: #7c4dff;
+  --colour-aubergine: #7d3f98;
+  --colour-grey-blue: #5a5fa6;
+  --colour-mid-blue: #448aff;
+  --colour-dark-cyan: #3ebcd1;
+  --colour-bright-cyan: #18ffff;
+
+  /* Secondary shades */
+  --colour-lilac: #6d64e8;
+  --colour-hot-pink: #e01b84;
+  --colour-slate: #283592;
+  --colour-light-grey: #acace4;
+  --colour-black: #050505;
+  --colour-dark-grey: #666666;
+
+  /* Base font family */
+  --font-heading: 'Montserrat', sans-serif;
+  --font-body: 'Roboto', sans-serif;
+}
+
+/* Apply global typography and base colours */
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-body);
+  color: var(--colour-dark-grey);
+  background-color: #f9f9fb;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  margin: 0;
+  color: var(--colour-deep-purple);
+}
+
+a {
+  color: var(--colour-mid-blue);
+  text-decoration: none;
+}
+
+/* Simple header styles */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 2rem;
+  background: linear-gradient(90deg, var(--colour-deep-purple), var(--colour-mid-purple));
+  color: white;
+}
+
+.app-header h1 {
+  font-size: 1.5rem;
+  color: inherit;
+}
+
+.app-nav {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.app-nav a {
+  font-weight: 500;
+  color: white;
+  transition: opacity 0.2s ease;
+}
+
+.app-nav a:hover {
+  opacity: 0.8;
+}
+
+/* Container utility class */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
