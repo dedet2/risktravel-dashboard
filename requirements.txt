@@ -1,5 +1,4 @@
-
-fastapi
-uvicorn
-pydantic
-pytest
+fastapi==0.111.0
+uvicorn==0.29.0
+pytest==8.0.0
+python-dotenv==1.0.0
