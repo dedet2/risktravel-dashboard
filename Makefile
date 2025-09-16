@@ -1,20 +1,13 @@
-# Development convenience targets
-
-PYTHON ?= python3
-
-.PHONY: install test run lint clean
+.PHONY: install test run check
 
 install:
-	$(PYTHON) -m pip install -r requirements.txt
+	pip install -r requirements.txt
 
 test:
-	$(PYTHON) -m pytest -q
+	pytest -q
 
 run:
-	$(PYTHON) -m uvicorn app.main:app --reload --port 8000
+	uvicorn app.main:app --reload --port 8000
 
-lint:
-	flake8 incluu_agents app || true
-
-clean:
-	rm -f agent_audit.log
+check:
+	python run_local_check.py

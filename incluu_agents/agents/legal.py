@@ -1,30 +1,23 @@
-"""LegalAgent implementation for legal research and appointments."""
+"""Legal agent implementation."""
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Iterable
 
-from .base import BaseAgent
-from ..orchestrator import Task, Result, generate_fake_lawyers
+from ..orchestrator import Agent, Task, Result, fake_lawyers
 
 
-class LegalAgent(BaseAgent):
-    """Agent that handles legal searches and appointment scheduling."""
+class LegalAgent(Agent):
+    """Agent that handles legal related tasks."""
 
-    name = "legal_agent"
-    tasks = ["legal_search", "legal_appointment"]
+    name: str = "legal_agent"
+    tasks: Iterable[str] = ("legal_search", "legal_appointment")
 
-    def handle_task(self, task: Task) -> Result:
+    def handle(self, task: Task) -> Result:
         if task.name == "legal_search":
-            speciality = task.payload.get("speciality")
-            lawyers = generate_fake_lawyers(5)
-            if speciality:
-                speciality_lower = speciality.lower()
-                lawyers = [l for l in lawyers if speciality_lower in l["speciality"].lower()]
-            return self.result(lawyers=lawyers, message=f"Found {len(lawyers)} lawyers")
+            return Result(ok=True, data={"lawyers": fake_lawyers()})
         elif task.name == "legal_appointment":
-            lawyer_name = task.payload.get("lawyer_name")
-            date = task.payload.get("date")
-            return self.result(confirmation=f"Appointment booked with {lawyer_name} on {date}")
-        else:
-            raise ValueError(f"LegalAgent cannot handle task {task.name}")
+            lawyer_id = task.payload.get("lawyer_id", 1)
+            date = task.payload.get("date", "2025-09-20")
+            return Result(ok=True, data={"appointment": {"lawyer_id": lawyer_id, "date": date}})
+        return Result(ok=False, error="Unknown task for LegalAgent")

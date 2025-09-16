@@ -1,31 +1,23 @@
-"""HealthAgent implementation for health‑related queries and appointments."""
+"""Health agent implementation."""
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Iterable
 
-from .base import BaseAgent
-from ..orchestrator import Task, Result, generate_fake_doctors
+from ..orchestrator import Agent, Task, Result, fake_doctors
 
 
-class HealthAgent(BaseAgent):
-    """Agent that handles health searches and appointment scheduling."""
+class HealthAgent(Agent):
+    """Agent that handles health related tasks."""
 
-    name = "health_agent"
-    tasks = ["health_search", "health_appointment"]
+    name: str = "health_agent"
+    tasks: Iterable[str] = ("health_search", "health_appointment")
 
-    def handle_task(self, task: Task) -> Result:
+    def handle(self, task: Task) -> Result:
         if task.name == "health_search":
-            speciality = task.payload.get("speciality")
-            doctors = generate_fake_doctors(5)
-            if speciality:
-                speciality_lower = speciality.lower()
-                doctors = [d for d in doctors if speciality_lower in d["speciality"].lower()]
-            return self.result(doctors=doctors, message=f"Found {len(doctors)} doctors")
+            return Result(ok=True, data={"doctors": fake_doctors()})
         elif task.name == "health_appointment":
-            doctor_name = task.payload.get("doctor_name")
-            date = task.payload.get("date")
-            # In a real system we would verify the doctor and time availability
-            return self.result(confirmation=f"Appointment booked with {doctor_name} on {date}")
-        else:
-            raise ValueError(f"HealthAgent cannot handle task {task.name}")
+            doctor_id = task.payload.get("doctor_id", 1)
+            date = task.payload.get("date", "2025-09-15")
+            return Result(ok=True, data={"appointment": {"doctor_id": doctor_id, "date": date}})
+        return Result(ok=False, error="Unknown task for HealthAgent")

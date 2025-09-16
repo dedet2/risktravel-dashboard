@@ -1,19 +1,9 @@
-"""Core orchestrator for routing tasks to AI agents.
+"""Core orchestrator and synthetic data helpers.
 
-The :class:`Orchestrator` maintains a registry of agents. Each agent
-advertises which tasks it can handle via its ``tasks`` attribute. When
-a task is posted the orchestrator looks up the registered agents and
-delegates execution. If multiple agents can handle a task the first
-registered agent is used.
-
-An audit log is written for every task processed. The log records the
-timestamp, agent name, task name, input payload and result. This log
-can be used for compliance and debugging. The log file location is
-configurable via the ``log_file`` constructor argument.
-
-The orchestrator is deliberately lightweight. More advanced features
-such as concurrent task processing, retries and scheduling can be added
-over time.
+This module defines a simple orchestrator class that routes tasks
+between registered agents. Each agent advertises the task names it
+supports. The orchestrator logs tasks to a file and returns
+structured results from agents.
 """
 
 from __future__ import annotations
@@ -22,172 +12,137 @@ import json
 import logging
 import os
 import random
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional
 
+logging.basicConfig(
+    filename=os.environ.get("AGENT_AUDIT_LOG", "agent_audit.log"),
+    level=logging.INFO,
+    format="%(asctime)s - %(message)s",
+)
 
+@dataclass
 class Task:
-    """Represents a unit of work to be handled by an agent.
+    """Represents a unit of work to be handled by an agent."""
+    name: str
+    payload: Dict[str, Any] = field(default_factory=dict)
 
-    Args:
-        name: A string identifying the task (e.g. ``"sales_outreach"``).
-        payload: Arbitrary data associated with the task. Must be JSON
-            serialisable.
-
-    The orchestrator does not interpret the payload; it simply passes
-    it to the agent responsible for the task.
-    """
-
-    def __init__(self, name: str, payload: Dict[str, Any]):
-        self.name = name
-        self.payload = payload
-
-
-class Result(Dict[str, Any]):
-    """A dictionary subclass representing the result of a task."""
-
-    def __str__(self) -> str:
-        return json.dumps(self, indent=2)
+@dataclass
+class Result:
+    """Represents the result of a task."""
+    ok: bool
+    data: Dict[str, Any] = field(default_factory=dict)
+    error: Optional[str] = None
 
 
 class Agent:
     """Base class for all agents.
 
-    Subclasses must define a ``name`` attribute and a ``tasks`` list of
-    task names they can handle. They must also implement a
-    ``handle_task`` method that accepts a :class:`Task` and returns a
-    :class:`Result`.
+    Subclasses should define a unique ``name`` and a list of
+    ``tasks`` they can handle. They must implement ``handle`` to
+    process a :class:`Task` and return a :class:`Result`.
     """
-
     name: str = "agent"
-    tasks: List[str] = []
+    tasks: Iterable[str] = ()
 
-    def handle_task(self, task: Task) -> Result:
+    def handle(self, task: Task) -> Result:
         raise NotImplementedError
 
 
 class Orchestrator:
-    """Simple orchestrator to route tasks to registered agents."""
+    """Registers agents and routes tasks to them."""
 
-    def __init__(self, log_file: Optional[str] = None) -> None:
-        self._agents: List[Agent] = []
-        self.log_file = log_file or os.environ.get("AGENT_AUDIT_LOG", "agent_audit.log")
-        # Configure logging
-        self.logger = logging.getLogger("Orchestrator")
-        self.logger.setLevel(logging.INFO)
-        # Avoid adding multiple handlers if multiple orchestrators are created
-        if not self.logger.handlers:
-            handler = logging.FileHandler(self.log_file)
-            formatter = logging.Formatter("%(asctime)s - %(message)s")
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
+    def __init__(self) -> None:
+        self._agents: Dict[str, Agent] = {}
+        self._routes: Dict[str, str] = {}
 
     def register_agent(self, agent: Agent) -> None:
-        """Register an agent so that it can receive tasks.
+        """Register an agent and map its tasks."""
+        if agent.name in self._agents:
+            raise ValueError(f"Agent name '{agent.name}' already registered")
+        self._agents[agent.name] = agent
+        for task_name in agent.tasks:
+            self._routes[task_name] = agent.name
 
-        Args:
-            agent: An instance of a subclass of :class:`Agent`.
-        """
-        self._agents.append(agent)
+    def registered_agents(self) -> List[Agent]:
+        """Return a list of registered agents."""
+        return list(self._agents.values())
 
-    def registered_agents(self) -> Iterable[Agent]:
-        """Return an iterable of all registered agents."""
-        return list(self._agents)
-
-    def post_task(self, name: str, payload: Dict[str, Any]) -> Result:
-        """Post a task to the orchestrator and return the result.
-
-        Args:
-            name: The task name.
-            payload: The payload for the task.
-
-        Returns:
-            A :class:`Result` returned by the handling agent.
-
-        Raises:
-            ValueError: If no agent can handle the task name.
-        """
-        task = Task(name=name, payload=payload)
-        for agent in self._agents:
-            if name in getattr(agent, "tasks", []):
-                result = agent.handle_task(task)
-                # Audit log
-                self._audit(task, agent, result)
-                return result
-        raise ValueError(f"No agent registered to handle task '{name}'")
-
-    def _audit(self, task: Task, agent: Agent, result: Result) -> None:
-        """Write an audit entry to the log file."""
-        entry = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-            "agent": agent.name,
-            "task": task.name,
-            "payload": task.payload,
-            "result": result,
-        }
-        self.logger.info(json.dumps(entry))
+    def post_task(self, name: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Route a task to the appropriate agent and return its result."""
+        logging.info(json.dumps({"task": name, "payload": payload}))
+        agent_name = self._routes.get(name)
+        if not agent_name:
+            return {"ok": False, "data": {}, "error": f"No agent for task '{name}'"}
+        agent = self._agents[agent_name]
+        try:
+            result: Result = agent.handle(Task(name=name, payload=payload))
+            logging.info(json.dumps({"agent": agent_name, "ok": result.ok}))
+            return {
+                "ok": result.ok,
+                "data": result.data,
+                "error": result.error,
+            }
+        except Exception as exc:
+            logging.exception("Agent execution error")
+            return {"ok": False, "data": {}, "error": str(exc)}
 
 
-def generate_fake_leads(count: int = 5) -> List[Dict[str, Any]]:
-    """Generate a list of synthetic sales leads."""
-    companies = ["Acme Corp", "Globex", "Initech", "Umbrella", "Soylent"]
-    first_names = ["Alex", "Jordan", "Taylor", "Morgan", "Casey"]
-    last_names = ["Smith", "Johnson", "Lee", "Brown", "Davis"]
+# Synthetic data helpers
+
+_FIRST_NAMES = ["Ava", "Kai", "Maya", "Liam", "Zoe", "Noah", "Ivy", "Leo", "Mia", "Eli"]
+_LAST_NAMES = ["Stone", "Rivera", "Chen", "Walker", "Singh", "Lopez", "Kim", "Ali", "King", "Patel"]
+_JOB_TITLES = ["Software Engineer", "Product Manager", "Data Analyst", "Sales Manager"]
+_DOCTORS = ["Dr. Kim - Family", "Dr. Chen - Cardiology", "Dr. Patel - Dermatology"]
+_LAWYERS = ["Atty. Rivera - Corporate", "Atty. Singh - Immigration", "Atty. Lopez - Real Estate"]
+
+
+def fake_leads(n: int = 10) -> List[Dict[str, Any]]:
+    """Generate synthetic sales leads."""
     leads = []
-    for _ in range(count):
-        name = f"{random.choice(first_names)} {random.choice(last_names)}"
+    for i in range(n):
+        name = f"{random.choice(_FIRST_NAMES)} {random.choice(_LAST_NAMES)}"
         leads.append({
+            "id": i + 1,
             "name": name,
-            "company": random.choice(companies),
             "email": f"{name.lower().replace(' ', '.')}@example.com",
-            "phone": f"555-{random.randint(100,999)}-{random.randint(1000,9999)}",
+            "score": random.randint(60, 99),
+            "status": "new",
         })
     return leads
 
 
-def generate_fake_jobs(count: int = 5) -> List[Dict[str, Any]]:
-    """Generate a list of synthetic job openings."""
-    titles = ["Software Engineer", "Data Analyst", "Project Manager", "Product Designer"]
-    companies = ["Techify", "DataCorp", "InnovateX", "FutureWorks"]
+def fake_jobs(n: int = 5) -> List[Dict[str, Any]]:
+    """Generate synthetic job listings."""
     jobs = []
-    for _ in range(count):
-        title = random.choice(titles)
-        company = random.choice(companies)
+    for i in range(n):
         jobs.append({
-            "title": title,
-            "company": company,
-            "location": random.choice(["Remote", "San Francisco", "New York", "Austin"]),
-            "salary_range": f"${random.randint(80,150)}k-${random.randint(150,250)}k",
-            "description": f"We are seeking a {title} to join our {company} team.",
+            "id": i + 1,
+            "title": random.choice(_JOB_TITLES),
+            "company": f"Company{i + 1}",
+            "location": random.choice(["Remote", "New York", "San Francisco", "Austin"]),
         })
     return jobs
 
 
-def generate_fake_doctors(count: int = 5) -> List[Dict[str, Any]]:
-    """Generate a list of synthetic doctors."""
-    specialities = ["General Practitioner", "Cardiologist", "Dermatologist", "Neurologist"]
-    names = ["Dr. Chen", "Dr. Patel", "Dr. Garcia", "Dr. Nguyen"]
-    doctors = []
-    for _ in range(count):
-        doctors.append({
-            "name": random.choice(names),
-            "speciality": random.choice(specialities),
-            "location": random.choice(["Oakland", "San Jose", "San Francisco", "Berkeley"]),
-            "next_available": f"2025-09-{random.randint(10,30)}",
-        })
-    return doctors
+def fake_doctors() -> List[Dict[str, Any]]:
+    """Return a list of synthetic doctors."""
+    return [
+        {"id": i + 1, "name": doc, "location": "City Clinic"}
+        for i, doc in enumerate(_DOCTORS)
+    ]
 
 
-def generate_fake_lawyers(count: int = 5) -> List[Dict[str, Any]]:
-    """Generate a list of synthetic lawyers."""
-    specialities = ["Corporate", "Family", "Criminal", "Immigration"]
-    names = ["Atty. Kim", "Atty. Johnson", "Atty. Singh", "Atty. Martinez"]
-    lawyers = []
-    for _ in range(count):
-        lawyers.append({
-            "name": random.choice(names),
-            "speciality": random.choice(specialities),
-            "location": random.choice(["Oakland", "San Jose", "San Francisco", "Berkeley"]),
-            "next_available": f"2025-09-{random.randint(10,30)}",
-        })
-    return lawyers
+def fake_lawyers() -> List[Dict[str, Any]]:
+    """Return a list of synthetic lawyers."""
+    return [
+        {"id": i + 1, "name": lawyer, "location": "Downtown Office"}
+        for i, lawyer in enumerate(_LAWYERS)
+    ]
+
+
+def fake_tickets(n: int = 5) -> List[Dict[str, Any]]:
+    """Generate synthetic support tickets."""
+    issues = ["Cannot login", "Payment failed", "Bug in latest update", "Feature request", "Account locked"]
+    return [{"id": i + 1, "issue": random.choice(issues)} for i in range(n)]

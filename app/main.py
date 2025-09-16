@@ -1,28 +1,12 @@
-"""FastAPI service exposing the agent orchestrator as a REST API.
-
-This service defines a handful of endpoints:
-
-* ``GET /health`` returns a simple JSON indicating the API is running.
-* ``GET /agents`` lists all registered agents and the tasks they handle.
-* ``GET /marketplace`` exposes a basic marketplace of agents with
-  placeholder pricing information. This can be expanded into a
-  full‑fledged catalogue.
-* ``POST /tasks`` accepts a JSON body containing a ``name`` and
-  ``payload``. It validates an API key (if configured) and routes
-  the task through the orchestrator. Returns the agent result.
-
-An API key can be configured via the ``API_KEY`` environment variable.
-If set, clients must include an ``X‑API‑Key`` header with each
-request. If ``API_KEY`` is empty, no authentication is performed.
-"""
+"""FastAPI service exposing the Incluu agent orchestrator as REST endpoints."""
 
 from __future__ import annotations
 
 import os
+from typing import Dict, Any, List, Optional
+
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from typing import Dict, List, Optional
 
 from incluu_agents import (
     Orchestrator,
@@ -34,9 +18,8 @@ from incluu_agents import (
     LegalAgent,
 )
 
-app = FastAPI(title="Incluu Agent Service", version="0.1.0")
+app = FastAPI(title="Incluu Agent Service", version="0.2.0")
 
-# Allow all origins for simplicity; adjust for production deployments
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -44,18 +27,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Instantiate the orchestrator and register agents at startup
+# Instantiate orchestrator and register all agents
 orch = Orchestrator()
 for agent_cls in [SalesAgent, SupportAgent, AnalyticsAgent, JobsAgent, HealthAgent, LegalAgent]:
     orch.register_agent(agent_cls())
 
+API_KEY = os.environ.get("API_KEY", "")  # optional API key
 
 def verify_api_key(x_api_key: Optional[str] = Header(None)) -> None:
-    """Dependency to enforce API key verification if configured."""
-    expected = os.environ.get("API_KEY")
-    if expected:
-        if x_api_key != expected:
-            raise HTTPException(status_code=401, detail="Invalid API key")
+    if API_KEY and x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
 
 
 @app.get("/health")
@@ -65,53 +46,41 @@ async def health() -> Dict[str, str]:
 
 
 @app.get("/agents")
-async def get_agents() -> List[Dict[str, object]]:
-    """List all registered agents and their tasks."""
-    agents_list = []
+async def get_agents() -> List[Dict[str, Any]]:
+    """Return a list of all registered agents and their tasks."""
+    agents = []
     for agent in orch.registered_agents():
-        agents_list.append({
-            "name": agent.name,
-            "tasks": list(getattr(agent, "tasks", [])),
-        })
-    return agents_list
+        agents.append({"name": agent.name, "tasks": list(agent.tasks)})
+    return agents
 
 
 @app.get("/marketplace")
-async def marketplace() -> List[Dict[str, object]]:
-    """Return a simple marketplace description for each agent."""
-    marketplace_entries = []
+async def marketplace() -> List[Dict[str, Any]]:
+    """Return marketplace entries for each agent with placeholder pricing."""
+    entries = []
     for agent in orch.registered_agents():
-        marketplace_entries.append({
+        entries.append({
             "name": agent.name,
             "description": f"Agent capable of {', '.join(agent.tasks)}",
-            # placeholder pricing: free tier for now
             "pricing": {"tier": "free", "rate": 0.0},
         })
-    return marketplace_entries
+    return entries
 
 
 @app.post("/tasks")
 async def post_task(
-    body: Dict[str, object],
+    body: Dict[str, Any],
     api_key: None = Depends(verify_api_key),
-) -> JSONResponse:
+) -> Dict[str, Any]:
     """Submit a task to the orchestrator.
 
-    The request body must include:
-
-    * ``name``: The task name (string).
-    * ``payload``: A dictionary payload for the task.
-
-    Returns the result produced by the assigned agent.
+    The request body should contain:
+    * ``name``: The task name.
+    * ``payload``: A dictionary of task parameters.
     """
-    name = body.get("name")
-    payload = body.get("payload", {})
-    if not isinstance(name, str):
+    if not isinstance(body.get("name"), str):
         raise HTTPException(status_code=400, detail="Field 'name' must be a string")
+    payload = body.get("payload", {})
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="Field 'payload' must be an object")
-    try:
-        result = orch.post_task(name=name, payload=payload)
-        return JSONResponse(content=result)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    return orch.post_task(name=body["name"], payload=payload)

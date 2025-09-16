@@ -1,29 +1,25 @@
-"""SupportAgent implementation for handling customer support queries."""
+"""Support agent implementation."""
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from collections import Counter
+from typing import Iterable
 
-from .base import BaseAgent
-from ..orchestrator import Task, Result
+from ..orchestrator import Agent, Task, Result, fake_tickets
 
 
-class SupportAgent(BaseAgent):
-    """Agent that replies to simple support queries with canned responses."""
+class SupportAgent(Agent):
+    """Agent that provides support ticket summaries and responses."""
 
-    name = "support_agent"
-    tasks = ["support_query", "customer_support"]
+    name: str = "support_agent"
+    tasks: Iterable[str] = ("support_summary", "customer_support")
 
-    RESPONSES = {
-        "refund": "We're sorry to hear that. Your refund has been processed.",
-        "pricing": "Our pricing plans start at $49 per month.",
-        "bug": "Thank you for reporting this bug. We've escalated it to our engineers.",
-    }
-
-    def handle_task(self, task: Task) -> Result:
-        question: str = task.payload.get("query", "").lower()
-        for keyword, response in self.RESPONSES.items():
-            if keyword in question:
-                return self.result(response=response)
-        # Default fallback
-        return self.result(response="Thank you for reaching out. We'll get back to you soon.")
+    def handle(self, task: Task) -> Result:
+        tickets = fake_tickets(6)
+        # Summarise issues by first word
+        summary = Counter(ticket["issue"].split()[0].lower() for ticket in tickets)
+        suggestions = [
+            {"id": ticket["id"], "response": f"We are looking into: {ticket['issue']}"}
+            for ticket in tickets
+        ]
+        return Result(ok=True, data={"summary": dict(summary), "suggestions": suggestions})

@@ -1,32 +1,24 @@
-"""AnalyticsAgent implementation for summarising numeric datasets."""
+"""Analytics agent implementation."""
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
-import statistics
+from typing import Iterable
 
-from .base import BaseAgent
-from ..orchestrator import Task, Result
+from ..orchestrator import Agent, Task, Result, fake_leads, fake_tickets
 
 
-class AnalyticsAgent(BaseAgent):
-    """Agent that performs simple analytics on numeric lists."""
+class AnalyticsAgent(Agent):
+    """Agent that generates simple KPI reports."""
 
-    name = "analytics_agent"
-    tasks = ["generate_report"]
+    name: str = "analytics_agent"
+    tasks: Iterable[str] = ("generate_report",)
 
-    def handle_task(self, task: Task) -> Result:
-        if task.name != "generate_report":
-            raise ValueError(f"AnalyticsAgent cannot handle task {task.name}")
-        data = task.payload.get("data")
-        if not isinstance(data, list) or not data:
-            return self.result(message="No data provided", summary={})
-        numbers = [float(x) for x in data]
-        summary = {
-            "count": len(numbers),
-            "mean": statistics.mean(numbers),
-            "median": statistics.median(numbers),
-            "min": min(numbers),
-            "max": max(numbers),
+    def handle(self, task: Task) -> Result:
+        leads = fake_leads(10)
+        tickets = fake_tickets(6)
+        kpis = {
+            "total_leads": len(leads),
+            "avg_lead_score": sum(l["score"] for l in leads) / len(leads),
+            "open_tickets": len(tickets),
         }
-        return self.result(summary=summary)
+        return Result(ok=True, data={"kpis": kpis})
